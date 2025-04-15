@@ -42,9 +42,11 @@ class ModuleShmOut
 : public UserDefinedElem {
 private:
   std::vector<Elem*> elements; 
+  std::vector<Node*> nodes; 
   std::vector<unsigned int> jointsData;
   DataManager* dmp;
   unsigned int elemNum;
+  unsigned int nodesNum;
   bool bPrintStepsNum;
 
   // shared memory data

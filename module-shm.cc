@@ -91,17 +91,38 @@ ModuleShmOut::ModuleShmOut(
   // Init private data
   dmp = pDM;
   outShmName = HP.GetFileName(); 
-  elemNum = HP.GetInt();
-  outBufferSize = sizeof(SharedData) + elemNum * sizeof(doublereal);
+  
+  elemNum = 0;
+  nodesNum = 0;
+
+  if (HP.IsKeyWord("nodes")){
+    nodesNum = HP.GetInt();
+  }
+  
+  if (HP.IsKeyWord("elements")){
+    elemNum = HP.GetInt();
+  }
+  outBufferSize = sizeof(SharedData) + elemNum * sizeof(doublereal) + 4 * nodesNum * sizeof(doublereal);
 
   printf("Output shared memory name: '%s'\n", outShmName.c_str());
 
-  silent_cout("Joints will be send to SharedMemory : " << elemNum << "\n");
+  if (elemNum != 0) {
+    silent_cout("Joints will be send to SharedMemory : " << elemNum << "\n");
+  }
+  if (nodesNum != 0) {
+    silent_cout("Nodes will be send to SharedMemory : " << nodesNum << "\n");
+  }
   for (size_t i = 0; i < elemNum; ++i) {
     Elem* el = dmp->ReadElem(HP, Elem::Type::JOINT);
     elements.push_back(el);
     jointsData.push_back(el->iGetPrivDataIdx(HP.GetStringWithDelims()));
     silent_cout("\t(" << el->GetLabel() << ")\n");
+  }
+
+  for (size_t i = 0; i < nodesNum; ++i) {
+    Node* node = dmp->ReadNode(HP, Node::Type::STRUCTURAL);
+    nodes.push_back(node);
+    silent_cout("\t(" << node->GetLabel() << ")\n");
   }
 
   outShmFd = InitSharedMemory(outShmName.c_str(), outBufferSize); 
@@ -121,7 +142,27 @@ int ModuleShmOut::InitSharedMemory(const char* outShmName, size_t size){
 
 void ModuleShmOut::Write() const{
   sem_wait(&outBuffer->semProduce);
-  for (size_t i = 0; i < outBuffer->dataSize; ++i) {
+  for (size_t i = 0; i < nodesNum; i += 7) {
+    outBuffer->data[i] = nodes[i]->dGetPrivData(nodes[i]->iGetPrivDataIdx("X[1]"));
+    outBuffer->data[i + 1] = nodes[i]->dGetPrivData(nodes[i]->iGetPrivDataIdx("X[2]"));
+    outBuffer->data[i + 2] = nodes[i]->dGetPrivData(nodes[i]->iGetPrivDataIdx("X[3]"));
+
+    outBuffer->data[i + 3] = nodes[i]->dGetPrivData(nodes[i]->iGetPrivDataIdx("PE[0]"));
+    outBuffer->data[i + 4] = nodes[i]->dGetPrivData(nodes[i]->iGetPrivDataIdx("PE[1]"));
+    outBuffer->data[i + 5] = nodes[i]->dGetPrivData(nodes[i]->iGetPrivDataIdx("PE[2]"));
+    outBuffer->data[i + 6] = nodes[i]->dGetPrivData(nodes[i]->iGetPrivDataIdx("PE[3]"));
+
+    printf("%g, %g, %g, %g, %g, %g, %g\n", 
+           nodes[i]->dGetPrivData(nodes[i]->iGetPrivDataIdx("X[1]")),
+           nodes[i]->dGetPrivData(nodes[i]->iGetPrivDataIdx("X[2]")),
+           nodes[i]->dGetPrivData(nodes[i]->iGetPrivDataIdx("X[3]")),
+           nodes[i]->dGetPrivData(nodes[i]->iGetPrivDataIdx("PE[0]")),
+           nodes[i]->dGetPrivData(nodes[i]->iGetPrivDataIdx("PE[1]")),
+           nodes[i]->dGetPrivData(nodes[i]->iGetPrivDataIdx("PE[2]")),
+           nodes[i]->dGetPrivData(nodes[i]->iGetPrivDataIdx("PE[3]"))
+          );
+  }
+  for (size_t i = 7 * nodesNum; i < i + elemNum; ++i) {
     outBuffer->data[i] = elements[i]->dGetPrivData(jointsData[i]); 
     // printf("element[%i] = %g\n", i, elements[i]->dGetPrivData(elements[i]->iGetPrivDataIdx("rz")));
   }
